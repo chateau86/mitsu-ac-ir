@@ -245,6 +245,7 @@ Turbo captures show fan `000`. Turbo probably overrides the fan.
 | `mitsu_ir.py` | frame splitter (`split_frames`, `parse`), the raw `MitsubishiPacket` with a byte table, the user-facing `AcState` with enums (`from_packet` / `to_packet`), `packet_timings()`, `encode()` and `report()` |
 | `test.py` | the captured samples (named by what was pressed), plus a small runner |
 | `roundtrip.py` | checks the encoder against every sample in `test.py` |
+| `custom_components/mitsubishi_ac_ir/` | the Home Assistant integration; `protocol.py` is its standard-library-only copy of the encoder (see PLAN.md) |
 | `jitter.py` | checks the parser against distorted timings (default ±20%); `--blast` prints distorted codes for testing the unit |
 
 `AcState` fields: `power`, `mode`, `temperature`, `fan`, `vane`, `isee`,

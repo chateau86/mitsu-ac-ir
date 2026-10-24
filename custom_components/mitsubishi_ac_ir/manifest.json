@@ -1,0 +1,13 @@
+{
+  "domain": "mitsubishi_ac_ir",
+  "name": "Mitsubishi AC IR",
+  "codeowners": ["@chateau86"],
+  "config_flow": true,
+  "dependencies": ["mqtt"],
+  "documentation": "https://github.com/chateau86/mitsu-ac-ir",
+  "integration_type": "device",
+  "iot_class": "assumed_state",
+  "issue_tracker": "https://github.com/chateau86/mitsu-ac-ir/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

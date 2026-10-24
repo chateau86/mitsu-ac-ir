@@ -1,0 +1,56 @@
+{
+  "title": "Mitsubishi AC IR",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add a Mitsubishi AC",
+        "description": "Add one AC unit, controlled through its own Zigbee2MQTT IR blaster. Add the integration again for each unit.",
+        "data": {
+          "name": "Name",
+          "blaster": "IR blaster",
+          "base_topic": "Zigbee2MQTT base topic",
+          "temperature_sensor": "Room temperature sensor"
+        },
+        "data_description": {
+          "name": "Names the device and its entities, e.g. Living room AC.",
+          "blaster": "The blaster's Zigbee2MQTT friendly name. Pick it from the list, or type it if the list is empty.",
+          "base_topic": "Leave as zigbee2mqtt unless you changed it in Zigbee2MQTT.",
+          "temperature_sensor": "Optional. Shown as the room temperature; the AC still uses its own sensor."
+        }
+      }
+    },
+    "error": {
+      "blaster_required": "Choose or type the blaster's friendly name."
+    },
+    "abort": {
+      "already_configured": "An AC using this blaster is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "AC settings",
+        "data": {
+          "blaster": "IR blaster",
+          "base_topic": "Zigbee2MQTT base topic",
+          "temperature_sensor": "Room temperature sensor"
+        },
+        "data_description": {
+          "blaster": "The blaster's Zigbee2MQTT friendly name. Pick it from the list, or type it if the list is empty.",
+          "base_topic": "Leave as zigbee2mqtt unless you changed it in Zigbee2MQTT.",
+          "temperature_sensor": "Optional. Shown as the room temperature; the AC still uses its own sensor."
+        }
+      }
+    },
+    "error": {
+      "blaster_required": "Choose or type the blaster's friendly name."
+    }
+  },
+  "entity": {
+    "switch": {
+      "turbo": { "name": "Turbo" },
+      "eco": { "name": "Eco" },
+      "clean": { "name": "Clean" }
+    }
+  }
+}
