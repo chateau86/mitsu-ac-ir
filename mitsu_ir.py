@@ -27,20 +27,21 @@ HEADER = bytes([0x23, 0xCB, 0x26, 0x01, 0x00])
 
 
 class Mode(IntEnum):
-    """Byte 6 bits 5-3. Only COOL and FAN are confirmed from captures."""
+    """Byte 6 bits 5-3. COOL, DRY and FAN are confirmed from captures."""
     IFEEL = 0    # UNVALIDATED: one capture only, not used by the owner (see AcState)
-    HEAT = 1
+    HEAT = 1     # UNVALIDATED: not on this (cooling-only) remote; spec value
     DRY = 2
     COOL = 3
-    AUTO = 4
+    AUTO = 4     # UNVALIDATED: not on this (cooling-only) remote; spec value
     FAN = 7      # fan-only; not on the spec sheet, confirmed by capture
 
 
-# Byte 8 low bits repeat the mode in a different encoding. COOL and FAN are
-# confirmed by captures; HEAT, DRY and AUTO come from the spec sheet only.
-# The single i-feel capture had 0b110, possibly carried over from cool.
+# Byte 8 low bits repeat the mode in a different encoding. COOL, DRY and FAN
+# are confirmed by captures; HEAT and AUTO come from the spec sheet only
+# and won't be tested (not on this remote).
+# IFEEL (unvalidated) sent 0b110 every time, even when entered from fan mode.
 MODE_B8 = {Mode.HEAT: 0b000, Mode.DRY: 0b010, Mode.COOL: 0b110,
-           Mode.AUTO: 0b000, Mode.FAN: 0b000}
+           Mode.AUTO: 0b000, Mode.FAN: 0b000, Mode.IFEEL: 0b110}
 
 
 class Fan(IntEnum):
@@ -64,11 +65,12 @@ class Vane(IntEnum):
     SWING = 7
 
 
-# Byte 9 bits 7-6: always exactly one set (10 or 01), but NOT determined by
-# the fan/vane settings. The same settings were captured with both, e.g. fan
-# 3 + vane auto as 0x83 (vane button pressed) and 0x43 (fan button pressed).
-# Possibly "last button pressed landed on auto". Meaning unknown; whether
-# the unit cares is still to be tested by blasting both variants.
+# Byte 9 bits 7-6: always exactly one set (10 or 01). It's a marker for the
+# press that sent the packet, not AC state: FAN_3 and VANE_AUTO_AGAIN have
+# identical bytes 0-16 but different flags. 10 shows up for one press (fan
+# or vane stepped onto auto, entering i-feel, and a few others) and is 01
+# for everything else. Send 01. Whether the unit cares is still to be tested
+# by blasting both variants. See KNOWLEDGE.md.
 B9_FLAG_MASK = 0xC0
 B9_FLAGS = {0x80: "10", 0x40: "01"}
 
@@ -235,17 +237,18 @@ class MitsubishiPacket:
 class AcState:
     """What the remote lets you set, as plain values.
 
-    Confirmed by captures: power, mode (cool, fan), temperature, fan, vane,
+    Confirmed by captures: power, mode (cool, dry, fan), temperature, fan, vane,
     clean, eco, turbo, clock.
 
     NOT VALIDATED (the owner doesn't use these, so no captures are planned):
-    i-feel mode, on/off timers. They decode from the spec sheet and a single
-    i-feel capture; don't rely on them. i-see is also spec-only so far
+    i-feel mode, on/off timers, and heat/auto modes (not on this cooling-only
+    remote). They decode from the spec sheet and a few i-feel captures;
+    don't rely on them. i-see is also spec-only so far
     (every capture had it off).
 
     There's no wide (left/right) vane field: on this unit it's manual, and
     the remote always sends the same value (B8_HIGH). Byte 9's bits 7-6 flag
-    isn't a field either: its meaning is unknown (see B9_FLAG_MASK).
+    isn't a field either: it marks the press, not state (see B9_FLAG_MASK).
     """
     power: bool = False
     mode: Mode = Mode.COOL
