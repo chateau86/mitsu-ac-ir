@@ -1,4 +1,4 @@
-"""Parse raw Mitsubishi HVAC IR timings into the 18-byte packet and AcState.
+"""Convert between raw Mitsubishi HVAC IR timings, the 18-byte packet and AcState.
 
 Protocol reference: r45635 HVAC-IR-Control "Mitsubishi IR Packet Data" v1.1.
 Timings are matched with wide windows (split at the midpoint between the
@@ -8,12 +8,13 @@ from dataclasses import dataclass, field, fields
 from datetime import time
 from enum import IntEnum
 
-from ir_decode import decode_ir
+from ir_decode import decode_ir, encode_ir
 
-# Nominal timings (µs) from the spec, for reference
+# Nominal timings (µs) from the spec; the encoder sends these
 HDR_MARK, HDR_SPACE = 3400, 1750
 BIT_MARK, ONE_SPACE, ZERO_SPACE = 450, 1300, 420
 RPT_SPACE = 17100
+REMOTE_RPT_SPACE = 13200  # what this remote actually sends; the encoder uses it
 
 # Loose classification thresholds (µs)
 HDR_MARK_MIN = 2000                            # header mark if longer than this
@@ -69,10 +70,13 @@ class Vane(IntEnum):
 # press that sent the packet, not AC state: FAN_3 and VANE_AUTO_AGAIN have
 # identical bytes 0-16 but different flags. 10 shows up for one press (fan
 # or vane stepped onto auto, entering i-feel, and a few others) and is 01
-# for everything else. Send 01. Whether the unit cares is still to be tested
-# by blasting both variants. See KNOWLEDGE.md.
+# for everything else. Blast test: 10 makes the unit beep twice; the end
+# state is the same, but the unit doesn't seem to like it. Send 01 (single
+# beep). Accepted as-is for now; revisit if it becomes annoying. See
+# KNOWLEDGE.md.
 B9_FLAG_MASK = 0xC0
 B9_FLAGS = {0x80: "10", 0x40: "01"}
+B9_FLAG_DEFAULT = 0x40
 
 # Byte 8 high nibble is the wide (left/right) vane in the spec. This unit's
 # left/right vane is manual only, and the remote always sends 3 ("middle").
@@ -165,6 +169,11 @@ def _b8_check(b: bytes) -> str:
 def _to_time(units: int) -> time:
     minutes = units * 10
     return time(minutes // 60 % 24, minutes % 60)
+
+
+def _to_units(t: time) -> int:
+    """Wall-clock time to 10-minute units, rounding down."""
+    return (t.hour * 60 + t.minute) // 10
 
 
 @dataclass
@@ -283,6 +292,38 @@ class AcState:
             off_timer=_to_time(b[11]) if timer & TIMER_END else None,
         )
 
+    def to_packet(self, flag: int = B9_FLAG_DEFAULT) -> MitsubishiPacket:
+        """Build the 18-byte packet, checksum included.
+
+        flag is byte 9's press marker (0x40 or 0x80); see B9_FLAG_MASK. The
+        default is what the remote sends for ordinary presses. Avoid 0x80:
+        the unit double-beeps. i-feel's
+        byte 7 offset bits aren't modelled, so they're always sent as 0.
+        """
+        if not 16 <= self.temperature <= 31:
+            raise ValueError(f"temperature {self.temperature} °C is outside 16-31")
+        if flag not in B9_FLAGS:
+            raise ValueError(f"flag 0x{flag:02x} must be 0x40 or 0x80")
+        b = bytearray(PACKET_LEN)
+        b[0:5] = HEADER
+        b[5] = 0x20 if self.power else 0x00
+        b[6] = self.mode << 3 | (0x40 if self.isee else 0)
+        b[7] = self.temperature - 16
+        b[8] = B8_HIGH | MODE_B8[self.mode]
+        b[9] = flag | self.vane << 3 | self.fan
+        b[10] = _to_units(self.clock)
+        # Timers: UNVALIDATED, built from the spec sheet only
+        if self.off_timer is not None:
+            b[11] = _to_units(self.off_timer)
+            b[13] |= TIMER_ANY | TIMER_END
+        if self.on_timer is not None:
+            b[12] = _to_units(self.on_timer)
+            b[13] |= TIMER_ANY | TIMER_START
+        b[14] = (B14_CLEAN if self.clean else 0) | (B14_ECO if self.eco else 0)
+        b[15] = B15_TURBO if self.turbo else 0
+        b[17] = sum(b[:17]) & 0xFF
+        return MitsubishiPacket(bytes(b))
+
     def __str__(self) -> str:
         parts = []
         for f in fields(self):
@@ -310,6 +351,31 @@ def parse(timings: list[int]) -> tuple[MitsubishiPacket | None, list[Frame]]:
     if complete:
         return MitsubishiPacket(complete[0].data[:PACKET_LEN]), frames
     return None, frames
+
+
+def packet_timings(packet: MitsubishiPacket, repeats: int = 2) -> list[int]:
+    """Mark/space timings (µs) for the packet.
+
+    The remote sends it twice (repeats=2), separated by REMOTE_RPT_SPACE.
+    Always send both copies. A single frame (repeats=1) is accepted, but the
+    unit reacts late (delayed beep, vane hesitates), as if it waits for the
+    missing second copy first. repeats=1 is for testing only.
+    """
+    frame = [HDR_MARK, HDR_SPACE]
+    for byte in packet.raw:
+        for n in range(8):              # LSB first
+            frame += [BIT_MARK, ONE_SPACE if byte >> n & 1 else ZERO_SPACE]
+    frame.append(BIT_MARK)              # trailing mark
+    timings = list(frame)
+    for _ in range(repeats - 1):
+        timings += [REMOTE_RPT_SPACE] + frame
+    return timings
+
+
+def encode(state: AcState, flag: int = B9_FLAG_DEFAULT, compress: bool = True,
+           repeats: int = 2) -> str:
+    """AcState to a zigbee2mqtt ir_code_to_send string."""
+    return encode_ir(packet_timings(state.to_packet(flag), repeats), compress)
 
 
 def report(code: str, title: str = "") -> None:

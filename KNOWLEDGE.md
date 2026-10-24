@@ -16,6 +16,11 @@ to this unit or mean something else here.
   whatever was comfortable, not what the last test left. Each test plan
   must list the full starting settings (power, mode, temperature, fan,
   vane, turbo/eco/clean) and how to reach them.
+- **Don't use auto in a blast test's start state.** The unit might happen
+  to be doing what the target asks (an auto vane resting at the top, say),
+  so nothing would visibly change. Start from fixed settings on the opposite
+  side of the target: vane pos 5 for a pos 1 target, fan 4 for a fan 2
+  target, and a temperature a few degrees away.
 - The fan and vane buttons each step one setting per press and can't jump.
   Plan sequences around that, and say which intermediate presses to capture.
 - Name captures by test and step (`BIGTEST_03`), and add a comment in
@@ -185,11 +190,18 @@ Turbo captures show fan `000`. Turbo probably overrides the fan.
 
 - The spec sheet and IRremoteESP8266 call bit 7 "fan auto" and bit 6 a
   "vane set" bit. Neither fits these captures.
-- **For the encoder:** send `01`. It's what the remote sends for every
-  ordinary press.
-- **Still to test:** blast one state with `01` and again with `10`, and see
-  if the unit behaves differently. Since the flag isn't state, a difference
-  is unlikely.
+- **Blast test (2026-10-24):** the same settings sent with each flag value,
+  from a start of 22 °C, fan 4, vane pos 5:
+  - `01` (code A): applied normally.
+  - `10` (code B): the unit **beeped twice**. It ended in the same state as
+    with A. (The vane also hesitated briefly, but the jitter test showed
+    the same hesitation with ordinary codes, so it's probably mechanical
+    and random, not caused by the flag.)
+- So the unit does read the flag. It looks like a "double beep" request:
+  the remote sets it when a press lands on auto, perhaps so you can tell by
+  ear. The flag doesn't seem to change the settings applied.
+- **For the encoder:** send `01`. It's what the remote sends for ordinary
+  presses, and it gives a single beep.
 
 ## 4. Remote presets and quirks
 
@@ -201,29 +213,81 @@ Turbo captures show fan `000`. Turbo probably overrides the fan.
   bit 2, install position in byte 15 bits 4–3) don't apply. Byte 15's
   `0x08`, which the sheet calls "install position: left", is turbo here.
 
-## 5. Code layout
+## 5. Encoder notes
+
+- Sends spec timings (3400/1750 header, 450 marks, 1300/420 spaces) and
+  this remote's 13200 µs gap between the two frames.
+- **Always send both copies of the frame** (`repeats=2`, the default).
+  Blast test (2026-10-24): a single frame (`repeats=1`) was accepted, but the
+  beep came late and the vane hesitated, as if the unit waits for the
+  missing second copy before acting. Two copies match the real remote and
+  cost nothing: the code is still about 104 characters.
+- Byte 9 flag defaults to `01` (`0x40`); `to_packet(flag=0x80)` sends `10`.
+- Generated codes compress to about 100 characters, because perfectly
+  regular timings turn into long back-references. The UFO-R11 handles them
+  fine (blast test).
+- **Long codes don't work.** A ~1600-character code with perfect timing
+  (`compress=False`) got no response, nor did ~1550-character ones. The
+  limit is somewhere between 104 characters (works) and about 1540 (fails),
+  whether in the UFO-R11 or zigbee2mqtt. So compression is required, and
+  `compress=False` is only useful for debugging.
+- **The physical remote keeps its own state.** After a blasted code, the
+  remote's display is out of sync with the unit, and the next remote press
+  sends the remote's full state, undoing the blasted settings.
+- `clock` defaults to 00:00. The unit may set its clock from it; that only
+  matters if its timers are used.
+
+## 6. Code layout
 
 | File | Contents |
 |---|---|
-| `ir_decode.py` | Tuya base64 + compression decoder, matplotlib plotter |
-| `mitsu_ir.py` | frame splitter (`split_frames`, `parse`), the raw `MitsubishiPacket` with a byte table, the user-facing `AcState` with enums, and `report()` |
+| `ir_decode.py` | Tuya base64 + compression decoder and encoder, matplotlib plotter |
+| `mitsu_ir.py` | frame splitter (`split_frames`, `parse`), the raw `MitsubishiPacket` with a byte table, the user-facing `AcState` with enums (`from_packet` / `to_packet`), `packet_timings()`, `encode()` and `report()` |
 | `test.py` | the captured samples (named by what was pressed), plus a small runner |
+| `roundtrip.py` | checks the encoder against every sample in `test.py` |
+| `jitter.py` | checks the parser against distorted timings (default ±20%); `--blast` prints distorted codes for testing the unit |
 
 `AcState` fields: `power`, `mode`, `temperature`, `fan`, `vane`, `isee`,
 `clean`, `eco`, `turbo`, `clock`, `on_timer`, `off_timer`. The timers and
 `Mode.IFEEL` are marked UNVALIDATED in the code. There's no field for the
 byte 9 flag or the byte 8 high nibble.
 
-## 6. Open items
+## 7. Open items
 
 - [x] Byte 9 flag: what sets it? It's a press marker from the remote, not
   state (BIGTEST, section 3).
-- [ ] Byte 9 flag: does the unit care whether it's `01` or `10`? (blast test)
-- [ ] Encoder: `AcState` → 18 bytes → timings for both frames → Tuya
-  base64.
-- [ ] Round-trip test: decode every sample, re-encode it, and compare the
-  bytes. Ignore the byte 9 flag (and so the checksum) when comparing,
-  since `AcState` can't hold it.
-- [ ] Jitter test: perturb sample timings by ±25% and check they still
-  decode to the same bytes.
+- [x] Byte 9 flag: does the unit care whether it's `01` or `10`? Yes: `10`
+  gives a double beep, with the same end state (blast test, section 3).
+- [x] Encoder: `AcState.to_packet()` → `packet_timings()` → `encode_ir()`.
+  `mitsu_ir.encode()` does all three.
+- [x] Round-trip test (`roundtrip.py`): all 45 samples rebuild their exact
+  bytes when given the capture's byte 9 flag. i-feel captures differ only
+  in byte 7's unmodelled offset bits.
+- [x] Blast test: does the unit accept generated codes? Yes, the
+  compressed code works, so `compress=False` isn't needed. Vane and fan
+  changes confirmed by sight and sound.
+- [ ] Temperature from a generated code isn't confirmed: the unit has no
+  temperature display (only two LEDs). It could be checked by blasting 16 °C
+  vs 31 °C and comparing compressor behaviour or outlet air, if needed.
+- [x] Jitter test (`jitter.py`): every sample plus a generated code still
+  decodes to the same bytes at ±20% (random per-edge jitter, uniform
+  stretch/shrink, and marks long with spaces short or the reverse). The
+  worst case, marks long and spaces short, first fails at ±34%, when a `1`
+  space drops below the 860 µs split. This covers the parser only, not the
+  unit's own receiver.
+- [x] Unit jitter test (`python jitter.py --blast`, results in
+  `jitter_codes.txt`). BLAST_STATE was blasted with ±20% distortions:
+  - J1 (all long), J2 (all short), J3 (marks long, spaces short) and J4
+    (the reverse): **all accepted**, with a single beep. J2 and J3 showed a
+    vane hesitation, which also happens at random with ordinary codes.
+  - J5 (random per-edge ±20%, 1552 characters): no response. So did both
+    controls: K1 (no jitter, uncompressed, 1604 characters) and K2 (random
+    ±10%, 1540 characters). Since K1 has perfect timing, the **code length**
+    is what failed, not the jitter. Random jitter can't be tested this way,
+    because random timings don't compress.
+  - Closed (2026-10-24): clock-rate error is the realistic failure for a
+    cheap blaster, and ±20% of it is fine. Random per-edge jitter isn't
+    tested and isn't expected.
+- [x] Single-frame test: accepted, but slow to react. Always send both
+  copies (section 5).
 - [ ] Not planned: i-feel, timers, i-see, heat and auto modes.
