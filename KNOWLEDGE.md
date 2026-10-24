@@ -213,6 +213,14 @@ Turbo captures show fan `000`. Turbo probably overrides the fan.
   bit 2, install position in byte 15 bits 4–3) don't apply. Byte 15's
   `0x08`, which the sheet calls "install position: left", is turbo here.
 
+- **No unit addressing.** The 18-byte packet has no field that selects a
+  unit, so every unit of this model obeys any remote or blaster it can see.
+  With two units, each blaster must be aimed or shielded so only its own
+  unit receives it.
+- **Remotes don't sync.** Each physical remote (one per unit) keeps its own
+  state, and every press sends all of it. Home Assistant behaves like a
+  third remote in the same way.
+
 ## 5. Encoder notes
 
 - Sends spec timings (3400/1750 header, 450 marks, 1300/420 spaces) and

@@ -157,6 +157,11 @@ target.
 - Domain: `mitsubishi_ac_ir`.
 - State is kept in HA's storage (`.storage/mitsubishi_ac_ir.<entry id>`) by
   a per-unit controller, shared by the climate entity and the switches.
+- **Power safety (after the first live test):** every blast carries power.
+  While HA thinks the unit is off, ordinary changes are stored, not sent, so
+  a unit turned on with the remote isn't switched off by, say, the Turbo
+  switch. Turbo or Eco on (switch or preset) also powers on; Clean doesn't
+  (it's persistent on the remote). Turn off always sends (`force_send`).
 - Presets are exclusive (`boost` turns eco off and the other way round);
   the Turbo and Eco switches can still turn both on.
 - The options flow can change the blaster, but the entry's unique ID stays
@@ -172,9 +177,10 @@ target.
 
 ## Known limits (for the README)
 
-- **The physical remote and HA don't sync.** The remote keeps its own state,
-  and its next press sends all of it, overriding HA. HA can't hear the
-  remote.
+- **HA is just another remote.** The physical remotes don't sync with each
+  other or with HA; each press sends that remote's full state. Accepted.
+- **No unit addressing.** A blaster controls any unit that sees it; aim or
+  shield each blaster (test 7 checks this). Accepted, physical fix only.
 - **Assumed state:** IR is one-way, so HA shows what it last sent, not what
   the unit is doing.
 - **Only tested on the MSXY-FP18VG (non-K)** with its factory remote and a

@@ -118,9 +118,13 @@ class MitsubishiClimate(ClimateEntity):
 
     # --- commands ---
 
+    # Power commands: "off" always sends (force_send), so it can resync a unit
+    # HA already thinks is off. Other changes while off are only remembered;
+    # see AcController.update.
+
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode == HVACMode.OFF:
-            self._controller.update(power=False)
+            self._controller.update(power=False, force_send=True)
         else:
             self._controller.update(power=True, mode=HVAC_TO_MODE[hvac_mode])
 
@@ -128,7 +132,7 @@ class MitsubishiClimate(ClimateEntity):
         self._controller.update(power=True)
 
     async def async_turn_off(self) -> None:
-        self._controller.update(power=False)
+        self._controller.update(power=False, force_send=True)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         changes: dict[str, Any] = {}
@@ -136,7 +140,7 @@ class MitsubishiClimate(ClimateEntity):
             changes["temperature"] = max(MIN_TEMP, min(MAX_TEMP, round(temp)))
         if (hvac_mode := kwargs.get("hvac_mode")) is not None:
             if hvac_mode == HVACMode.OFF:
-                changes["power"] = False
+                changes.update(power=False, force_send=True)
             else:
                 changes.update(power=True, mode=HVAC_TO_MODE[hvac_mode])
         if changes:
@@ -150,6 +154,9 @@ class MitsubishiClimate(ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         # Presets are exclusive; the Turbo and Eco switches can still mix them
-        self._controller.update(
-            turbo=preset_mode == PRESET_BOOST, eco=preset_mode == PRESET_ECO
-        )
+        changes: dict[str, Any] = {
+            "turbo": preset_mode == PRESET_BOOST, "eco": preset_mode == PRESET_ECO
+        }
+        if preset_mode != PRESET_NONE:
+            changes["power"] = True     # nobody picks boost/eco to stay off
+        self._controller.update(**changes)

@@ -9,11 +9,13 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .controller import AcController, MitsubishiConfigEntry
 
-# (AcState field, translation key, icon)
+# (AcState field, translation key, icon, turning it on also turns the AC on)
+# Clean doesn't power on: the remote treats it as a persistent setting, so
+# while the AC is off it just waits for the next command.
 SWITCHES = (
-    ("turbo", "turbo", "mdi:fan-plus"),
-    ("eco", "eco", "mdi:leaf"),
-    ("clean", "clean", "mdi:broom"),
+    ("turbo", "turbo", "mdi:fan-plus", True),
+    ("eco", "eco", "mdi:leaf", True),
+    ("clean", "clean", "mdi:broom", False),
 )
 
 
@@ -23,7 +25,8 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     async_add_entities(
-        MitsubishiSwitch(entry.runtime_data, field, key, icon) for field, key, icon in SWITCHES
+        MitsubishiSwitch(entry.runtime_data, field, key, icon, powers_on)
+        for field, key, icon, powers_on in SWITCHES
     )
 
 
@@ -34,9 +37,12 @@ class MitsubishiSwitch(SwitchEntity):
     _attr_assumed_state = True
     _attr_should_poll = False
 
-    def __init__(self, controller: AcController, field: str, key: str, icon: str) -> None:
+    def __init__(
+        self, controller: AcController, field: str, key: str, icon: str, powers_on: bool
+    ) -> None:
         self._controller = controller
         self._field = field
+        self._powers_on = powers_on
         self._attr_translation_key = key
         self._attr_icon = icon
         self._attr_unique_id = f"{controller.entry.entry_id}_{field}"
@@ -50,7 +56,10 @@ class MitsubishiSwitch(SwitchEntity):
         return getattr(self._controller.state, self._field)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        self._controller.update(**{self._field: True})
+        if self._powers_on:
+            self._controller.update(**{self._field: True, "power": True})
+        else:
+            self._controller.update(**{self._field: True})
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         self._controller.update(**{self._field: False})

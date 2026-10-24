@@ -96,12 +96,21 @@ class AcController:
         return lambda: self._listeners.remove(listener)
 
     @callback
-    def update(self, **changes: Any) -> None:
-        """Change settings, refresh the entities, and schedule a blast."""
+    def update(self, force_send: bool = False, **changes: Any) -> None:
+        """Change settings, refresh the entities, and schedule a blast.
+
+        Every blast carries the full state, power included. So while we think
+        the unit is off, ordinary changes are only remembered, not sent:
+        sending them would turn off a unit that was switched on with the
+        physical remote. They go out with the next command that turns it on.
+        Explicit power commands pass force_send=True, so "off" always sends.
+        """
         self.state = replace(self.state, **changes)
         for listener in list(self._listeners):
             listener()
         self._store.async_delay_save(self._data_to_save, SEND_DELAY)
+        if not (force_send or self.state.power):
+            return
         # Debounce: restart the timer, so quick changes go out as one blast
         if self._cancel_send:
             self._cancel_send()

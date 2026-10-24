@@ -54,14 +54,33 @@ Changes made within about a second are sent as one command, so the unit
 beeps once. Every command also sets the unit's clock to Home Assistant's
 time.
 
+Every command carries the full state, power included. So while Home
+Assistant thinks the AC is off:
+
+- Changing a setting (temperature, fan, vane, Clean, or turning Turbo or Eco
+  off) only remembers it. It's sent with the next command that turns the AC
+  on. This way a unit switched on with the physical remote never gets
+  turned off by accident.
+- Turning **Turbo** or **Eco** on (switch or preset) also turns the AC on.
+  **Clean** doesn't: like on the remote, it's a persistent setting that
+  waits for the next command.
+- **Turn off** always sends, even if Home Assistant already thinks it's off,
+  so you can always force the unit off.
+
 ### Limits
 
 - **Assumed state.** IR is one-way. Home Assistant shows what it last sent,
   not what the unit is actually doing. The state survives restarts, and
   nothing is sent at startup.
-- **The physical remote doesn't sync with Home Assistant.** The remote keeps
-  its own settings, and any button press sends all of them, overriding what
-  Home Assistant set. Home Assistant can't hear the remote.
+- **Home Assistant is just another remote.** Like the physical remotes
+  (which don't sync with each other either), each one keeps its own
+  settings, and any press sends all of them, overriding whatever was set
+  before. Home Assistant can't hear the other remotes, so its card can show
+  stale settings after someone uses one.
+- **IR can't target one unit.** The packet has no unit address, so a unit
+  obeys any remote or blaster it can see. With several units, aim or shield
+  each blaster so only its own unit receives it; that's a physical fix, not
+  something the integration can do.
 - Only tested on one MSXY-FP18VG (non-K) with its factory remote. Heat, auto,
   i-feel and the timers aren't supported.
 
