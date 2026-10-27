@@ -162,6 +162,10 @@ target.
   a unit turned on with the remote isn't switched off by, say, the Turbo
   switch. Turbo or Eco on (switch or preset) also powers on; Clean doesn't
   (it's persistent on the remote). Turn off always sends (`force_send`).
+- **Temperature offset (per unit, added 2026-10-27):** one unit holds the
+  room 2 °C below its setting. HA's target is the room temperature; the
+  controller adds the unit's offset only at send time, so `protocol.py`
+  never sees it. HA's range is 16–31 minus the offset.
 - Presets are exclusive (`boost` turns eco off and the other way round);
   the Turbo and Eco switches can still turn both on.
 - The options flow can change the blaster, but the entry's unique ID stays

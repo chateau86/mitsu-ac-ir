@@ -39,6 +39,12 @@ Then restart Home Assistant.
   typed as the friendly name.
 - **Zigbee2MQTT base topic:** usually `zigbee2mqtt`.
 - **Room temperature sensor (optional):** shown as the current temperature.
+- **Temperature offset:** for a unit that doesn't hold the temperature it's
+  set to. It's added to the target before sending: if the unit keeps the
+  room at 25 °C when set to 27 °C, use **+2**. You then set the room
+  temperature you want in Home Assistant, and the unit is sent 27. Home
+  Assistant's allowed range shifts to match (14–29 °C with +2). Leave it at 0
+  for an accurate unit.
 
 Add the integration again for each unit. Each one needs its own blaster. The
 *Configure* button on an entry changes its blaster, topic or sensor later.

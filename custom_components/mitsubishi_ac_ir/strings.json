@@ -9,13 +9,15 @@
           "name": "Name",
           "blaster": "IR blaster",
           "base_topic": "Zigbee2MQTT base topic",
-          "temperature_sensor": "Room temperature sensor"
+          "temperature_sensor": "Room temperature sensor",
+          "temperature_offset": "Temperature offset"
         },
         "data_description": {
           "name": "Names the device and its entities, e.g. Living room AC.",
           "blaster": "The blaster's Zigbee2MQTT friendly name. Pick it from the list, or type it if the list is empty.",
           "base_topic": "Leave as zigbee2mqtt unless you changed it in Zigbee2MQTT.",
-          "temperature_sensor": "Optional. Shown as the room temperature; the AC still uses its own sensor."
+          "temperature_sensor": "Optional. Shown as the room temperature; the AC still uses its own sensor.",
+          "temperature_offset": "Added to the target before it's sent to this unit. If the unit holds the room 2 °C below its setting, use +2: setting 25 in Home Assistant then sends 27. Leave at 0 if the unit is accurate."
         }
       }
     },
@@ -33,12 +35,14 @@
         "data": {
           "blaster": "IR blaster",
           "base_topic": "Zigbee2MQTT base topic",
-          "temperature_sensor": "Room temperature sensor"
+          "temperature_sensor": "Room temperature sensor",
+          "temperature_offset": "Temperature offset"
         },
         "data_description": {
           "blaster": "The blaster's Zigbee2MQTT friendly name. Pick it from the list, or type it if the list is empty.",
           "base_topic": "Leave as zigbee2mqtt unless you changed it in Zigbee2MQTT.",
-          "temperature_sensor": "Optional. Shown as the room temperature; the AC still uses its own sensor."
+          "temperature_sensor": "Optional. Shown as the room temperature; the AC still uses its own sensor.",
+          "temperature_offset": "Added to the target before it's sent to this unit. If the unit holds the room 2 °C below its setting, use +2: setting 25 in Home Assistant then sends 27. Leave at 0 if the unit is accurate."
         }
       }
     },
@@ -48,9 +52,15 @@
   },
   "entity": {
     "switch": {
-      "turbo": { "name": "Turbo" },
-      "eco": { "name": "Eco" },
-      "clean": { "name": "Clean" }
+      "turbo": {
+        "name": "Turbo"
+      },
+      "eco": {
+        "name": "Eco"
+      },
+      "clean": {
+        "name": "Clean"
+      }
     }
   }
 }

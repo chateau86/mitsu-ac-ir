@@ -18,10 +18,13 @@ from .const import (
     BRIDGE_DEVICES_TIMEOUT,
     CONF_BASE_TOPIC,
     CONF_BLASTER,
+    CONF_TEMPERATURE_OFFSET,
     CONF_TEMPERATURE_SENSOR,
     DEFAULT_BASE_TOPIC,
     DEFAULT_NAME,
+    DEFAULT_TEMPERATURE_OFFSET,
     DOMAIN,
+    MAX_TEMPERATURE_OFFSET,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -94,6 +97,18 @@ def _schema(blasters: list[str], defaults: dict[str, Any], with_name: bool) -> v
     )] = selector.EntitySelector(
         selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
     )
+    fields[vol.Required(
+        CONF_TEMPERATURE_OFFSET,
+        default=defaults.get(CONF_TEMPERATURE_OFFSET, DEFAULT_TEMPERATURE_OFFSET),
+    )] = selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=-MAX_TEMPERATURE_OFFSET,
+            max=MAX_TEMPERATURE_OFFSET,
+            step=1,
+            unit_of_measurement="°C",
+            mode=selector.NumberSelectorMode.BOX,
+        )
+    )
     return vol.Schema(fields)
 
 
@@ -112,7 +127,12 @@ class MitsubishiAcIrConfigFlow(ConfigFlow, domain=DOMAIN):
                 # One entry per blaster: each unit has its own
                 await self.async_set_unique_id(blaster)
                 self._abort_if_unique_id_configured()
-                data = {**user_input, CONF_BLASTER: blaster}
+                data = {
+                    **user_input,
+                    CONF_BLASTER: blaster,
+                    # NumberSelector gives a float
+                    CONF_TEMPERATURE_OFFSET: int(user_input.get(CONF_TEMPERATURE_OFFSET, 0)),
+                }
                 return self.async_create_entry(title=data.pop(CONF_NAME), data=data)
 
         blasters = await _async_list_blasters(self.hass, DEFAULT_BASE_TOPIC)
@@ -144,6 +164,7 @@ class MitsubishiAcIrOptionsFlow(OptionsFlow):
                     CONF_BLASTER: blaster,
                     # Store None when cleared, so it overrides the setup value
                     CONF_TEMPERATURE_SENSOR: user_input.get(CONF_TEMPERATURE_SENSOR),
+                    CONF_TEMPERATURE_OFFSET: int(user_input.get(CONF_TEMPERATURE_OFFSET, 0)),
                 })
 
         base = current.get(CONF_BASE_TOPIC) or DEFAULT_BASE_TOPIC

@@ -17,9 +17,13 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_BASE_TOPIC,
     CONF_BLASTER,
+    CONF_TEMPERATURE_OFFSET,
     CONF_TEMPERATURE_SENSOR,
     DEFAULT_BASE_TOPIC,
+    DEFAULT_TEMPERATURE_OFFSET,
     DOMAIN,
+    MAX_TEMP,
+    MIN_TEMP,
     SEND_DELAY,
 )
 from .protocol import AcState, Fan, Mode, Vane, encode
@@ -66,6 +70,25 @@ class AcController:
     def temperature_sensor(self) -> str | None:
         return self.config.get(CONF_TEMPERATURE_SENSOR) or None
 
+    # state.temperature is HA's target (a room temperature). The offset is
+    # only added when sending, so the encoder and the stored state never see it.
+
+    @property
+    def temperature_offset(self) -> int:
+        return int(self.config.get(CONF_TEMPERATURE_OFFSET) or DEFAULT_TEMPERATURE_OFFSET)
+
+    @property
+    def min_temp(self) -> int:
+        """Lowest HA target that still sends a setting the unit accepts."""
+        return MIN_TEMP - self.temperature_offset
+
+    @property
+    def max_temp(self) -> int:
+        return MAX_TEMP - self.temperature_offset
+
+    def clamp_target(self, temperature: float) -> int:
+        return max(self.min_temp, min(self.max_temp, round(temperature)))
+
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
@@ -88,6 +111,8 @@ class AcController:
             self.state = replace(self.state, **values)
         except (TypeError, ValueError):
             _LOGGER.warning("Ignoring unreadable saved state for %s", self.entry.title)
+        # The offset may have changed since the target was saved
+        self.state = replace(self.state, temperature=self.clamp_target(self.state.temperature))
 
     @callback
     def add_listener(self, listener: Callable[[], None]) -> CALLBACK_TYPE:
@@ -131,10 +156,16 @@ class AcController:
 
     async def async_send(self) -> None:
         """Encode the full state with the current time and publish it."""
-        state = replace(self.state, clock=dt_util.now().time())
+        sent_temp = self.state.temperature + self.temperature_offset
+        state = replace(
+            self.state,
+            temperature=max(MIN_TEMP, min(MAX_TEMP, sent_temp)),
+            clock=dt_util.now().time(),
+        )
         # The compressor is pure Python; keep it off the event loop
         code = await self.hass.async_add_executor_job(encode, state)
-        _LOGGER.debug("Sending %s to %s", state, self.topic)
+        _LOGGER.debug("Sending %s (HA target %s, offset %+d) to %s", state,
+                      self.state.temperature, self.temperature_offset, self.topic)
         await mqtt.async_publish(self.hass, self.topic, code, qos=0, retain=False)
 
     @callback

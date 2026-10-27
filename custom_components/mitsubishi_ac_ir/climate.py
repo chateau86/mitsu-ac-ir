@@ -13,7 +13,6 @@ from homeassistant.core import Event, EventStateChangedData, HomeAssistant, call
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
-from .const import MAX_TEMP, MIN_TEMP
 from .controller import AcController, MitsubishiConfigEntry
 from .protocol import Fan, Mode, Vane
 
@@ -45,8 +44,6 @@ class MitsubishiClimate(ClimateEntity):
     _attr_should_poll = False
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = 1
-    _attr_min_temp = MIN_TEMP
-    _attr_max_temp = MAX_TEMP
     _attr_hvac_modes = [HVACMode.OFF, *HVAC_TO_MODE]
     _attr_fan_modes = list(FAN_MODES)
     _attr_swing_modes = list(SWING_MODES)
@@ -64,6 +61,9 @@ class MitsubishiClimate(ClimateEntity):
         self._controller = controller
         self._attr_unique_id = f"{controller.entry.entry_id}_climate"
         self._attr_device_info = controller.device_info
+        # The unit's 16-31 °C, shifted by the unit's offset (HA works in room temps)
+        self._attr_min_temp = controller.min_temp
+        self._attr_max_temp = controller.max_temp
 
     async def async_added_to_hass(self) -> None:
         self.async_on_remove(self._controller.add_listener(self.async_write_ha_state))
@@ -137,7 +137,7 @@ class MitsubishiClimate(ClimateEntity):
     async def async_set_temperature(self, **kwargs: Any) -> None:
         changes: dict[str, Any] = {}
         if (temp := kwargs.get(ATTR_TEMPERATURE)) is not None:
-            changes["temperature"] = max(MIN_TEMP, min(MAX_TEMP, round(temp)))
+            changes["temperature"] = self._controller.clamp_target(temp)
         if (hvac_mode := kwargs.get("hvac_mode")) is not None:
             if hvac_mode == HVACMode.OFF:
                 changes.update(power=False, force_send=True)
